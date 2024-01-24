@@ -2,7 +2,7 @@
 <html><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 
-<title>PA#2</title>
+<title>PA#3</title>
 <style>
     body {
         background-color: #EEEEEE;
@@ -17,15 +17,17 @@
 </head>
 <body onload="init()">
 
-<h2>A Cube with "Trackball" Mouse Rotation</h2>
+    <h1>
+        <center>A Kiss Surface with light animation and "Trackball" mouse rotation</center><br>
+    </h1>
 
 <p id="message">Drag your mouse on the cube to rotate it.<br>
 (On a touch screen, you can use your finger.)</p>
-<p>
+<p hidden="hidden">
    <label for="x">&emsp;LIGHT X</label>
    <input type="range" id="x" name="light x" min="-10" max="10" step="0.5" value="0">
 </p>
-<p>
+<p hidden="hidden">
    <label for="y">&emsp;LIGHT Y</label>
    <input type="range" id="y" name="light y" min="-10" max="10" step="0.5" value="0">
 </p>
@@ -36,7 +38,7 @@
 </body>
 
 <div id="canvas-holder">
-   <canvas width="600" height="600" id="webglcanvas" style="background-color:white"></canvas>
+   <canvas width="700" height="600" id="webglcanvas" style="background-color:whitesmoke"></canvas>
 </div>
 
 

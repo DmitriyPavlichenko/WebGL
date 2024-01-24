@@ -1,9 +1,10 @@
 'use strict';
 
 let gl;                         // The webgl context.
-let surface;                    // A surface model.
+let surface, surface2;                    // A surface model.
 let shProgram;                  // A shader program.
 let spaceball;                  // A SimpleRotator object that lets the user rotate the view by mouse.
+let xx, yy, zz=0;
 
 
 // Degree-to-Radian conversion
@@ -82,7 +83,20 @@ function draw() {
     gl.uniformMatrix4fv(shProgram.iModelViewProjectionMatrix, false, modelViewProjection);
     gl.uniformMatrix4fv(shProgram.iNormalMatrix, false, normalMatrix);
 
+    gl.uniform3fv(shProgram.iLightPosition, [xx=Math.sin(Date.now()*0.001),yy=2*Math.cos(Date.now()*0.001), zz]);
+
     surface.Draw();
+
+    gl.uniformMatrix4fv(shProgram.iModelViewProjectionMatrix, false, m4.multiply(modelViewProjection,
+        m4.translation(xx, yy, zz)));
+    gl.uniform1i(shProgram.ilight, true);
+    surface2.Draw();
+    gl.uniform1i(shProgram.ilight, false);
+}
+
+function draw2(){
+    draw()
+    window.requestAnimationFrame(draw2)
 }
 
 /*
@@ -127,9 +141,12 @@ function initGL() {
     shProgram.iModelViewProjectionMatrix = gl.getUniformLocation(prog, "ModelViewProjectionMatrix");
     shProgram.iLightPosition = gl.getUniformLocation(prog, "lightPosition");
     shProgram.iNormalMatrix = gl.getUniformLocation(prog, "normalMatrix");
+    shProgram.ilight = gl.getUniformLocation(prog, "light");
 
     surface = new Model('Surface');
     surface.BufferData(CreateSurfaceData());
+    surface2 = new Model('Surface');
+    surface2.BufferData(CreateSphere());
 
     gl.enable(gl.DEPTH_TEST);
 }
@@ -137,7 +154,7 @@ function initGL() {
 
 /* Creates a program for use in the WebGL context gl, and returns the
  identifier for that program.  If an error occurs while compiling or
- linking the program, an exception of type Error is thrown.  The error 
+ linking the program, an exception of type Error is thrown.  The error
  string contains the compilation or linking error.  If no error occurs,
  the program identifier is the return value of the function.
  The second and third parameters are strings that contain the
@@ -205,5 +222,45 @@ function init() {
     inputs.forEach(input => input.addEventListener("input", updateLight));
 
 
-    draw();
+    draw2();
+}
+
+function CreateSphere() {
+    const vertexList = [];
+    const radius = 0.2;
+    const delta = 0.1;
+
+    for (let u = 0; u < Math.PI * 2; u += delta) {
+        for (let t = 0; t < Math.PI; t += delta) {
+            const v = shhVert(u, t);
+            const w = shhVert(u + delta, t);
+            const wv = shhVert(u, t + delta);
+            const ww = shhVert(u + delta, t + delta);
+
+            vertexList.push(
+                v.x, v.y, v.z,
+                w.x, w.y, w.z,
+                wv.x, wv.y, wv.z,
+                wv.x, wv.y, wv.z,
+                w.x, w.y, w.z,
+                ww.x, ww.y, ww.z
+            );
+        }
+    }
+    return vertexList;
+}
+
+const radius = 0.2;
+
+function shhVert(long, lat) {
+    const cosLong = Math.cos(long);
+    const sinLong = Math.sin(long);
+    const sinLat = Math.sin(lat);
+    const cosLat = Math.cos(lat);
+
+    return {
+        x: radius * cosLong * sinLat,
+        y: radius * sinLong * sinLat,
+        z: radius * cosLat
+    };
 }
