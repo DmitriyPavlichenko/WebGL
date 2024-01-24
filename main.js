@@ -4,7 +4,8 @@ let gl;                         // The webgl context.
 let surface, surface2;                    // A surface model.
 let shProgram;                  // A shader program.
 let spaceball;                  // A SimpleRotator object that lets the user rotate the view by mouse.
-let xx, yy, zz=0;
+let xx, yy, zz = 0;
+let coords = [0, 0]
 
 
 // Degree-to-Radian conversion
@@ -17,13 +18,17 @@ function deg2rad(angle) {
 function Model(name) {
     this.name = name;
     this.iVertexBuffer = gl.createBuffer();
+    this.iTexBuffer = gl.createBuffer();
     this.vertices = 0;
     this.count = 0;
 
-    this.BufferData = function (vertices) {
+    this.BufferData = function (vertices, texs) {
 
         gl.bindBuffer(gl.ARRAY_BUFFER, this.iVertexBuffer);
         gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STREAM_DRAW);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.iTexBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(texs), gl.STREAM_DRAW);
         this.vertices = vertices;
         this.count = vertices.length / 3;
     }
@@ -33,6 +38,9 @@ function Model(name) {
         gl.bindBuffer(gl.ARRAY_BUFFER, this.iVertexBuffer);
         gl.vertexAttribPointer(shProgram.iAttribVertex, 3, gl.FLOAT, false, 0, 0);
         gl.enableVertexAttribArray(shProgram.iAttribVertex);
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.iTexBuffer);
+        gl.vertexAttribPointer(shProgram.iAttribTex, 2, gl.FLOAT, false, 0, 0);
+        gl.enableVertexAttribArray(shProgram.iAttribTex);
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, this.count);
     }
 }
@@ -83,10 +91,14 @@ function draw() {
     gl.uniformMatrix4fv(shProgram.iModelViewProjectionMatrix, false, modelViewProjection);
     gl.uniformMatrix4fv(shProgram.iNormalMatrix, false, normalMatrix);
 
-    gl.uniform3fv(shProgram.iLightPosition, [xx=Math.sin(Date.now()*0.001),yy=2*Math.cos(Date.now()*0.001), zz]);
+    gl.uniform3fv(shProgram.iLightPosition, [xx = Math.sin(Date.now() * 0.001), yy = 2 * Math.cos(Date.now() * 0.001), zz]);
+    gl.uniform2fv(shProgram.iCoords, coords);
+    gl.uniform1f(shProgram.iScale, 5 - document.getElementById('scale').value);
 
     surface.Draw();
-
+    zz = mapRange(coords[1], 0, 1, -500, 500) / 500;
+    xx = zz * zz * Math.sqrt(1 - zz) * Math.cos(mapRange(coords[0], 0, 1, 0, Math.PI * 2));
+    yy = zz * zz * Math.sqrt(1 - zz) * Math.sin(mapRange(coords[0], 0, 1, 0, Math.PI * 2));
     gl.uniformMatrix4fv(shProgram.iModelViewProjectionMatrix, false, m4.multiply(modelViewProjection,
         m4.translation(xx, yy, zz)));
     gl.uniform1i(shProgram.ilight, true);
@@ -94,7 +106,7 @@ function draw() {
     gl.uniform1i(shProgram.ilight, false);
 }
 
-function draw2(){
+function draw2() {
     draw()
     window.requestAnimationFrame(draw2)
 }
@@ -105,6 +117,7 @@ function draw2(){
  */
 function CreateSurfaceData() {
     let vertexList = [];
+    let textureList = [];
     let x, y, z, x1, y1, z1, u1;
     let zScale = 500;
     let zStep = 1 / zScale;
@@ -119,15 +132,27 @@ function CreateSurfaceData() {
             x = z * z * Math.sqrt(1 - z) * Math.cos(deg2rad(u));
             y = z * z * Math.sqrt(1 - z) * Math.sin(deg2rad(u));
             vertexList.push(x, y, z);
+            textureList.push(u / 360, mapRange(z, -1, 1, 0, 1))
 
             z1 = z + zStep;
             u1 = u + uStep;
             x1 = z1 * z1 * Math.sqrt(1 - z1) * Math.cos(deg2rad(u1));
             y1 = z1 * z1 * Math.sqrt(1 - z1) * Math.sin(deg2rad(u1));
             vertexList.push(x1, y1, z1);
+            textureList.push(u1 / 360, mapRange(z1, -1, 1, 0, 1))
         }
     }
-    return vertexList;
+
+    // Return the array containing the vertex data for the 3D surface.
+    return [vertexList, textureList];
+}
+
+// linearly maps value from the range (a..b) to (c..d)
+function mapRange(value, a, b, c, d) {
+    // first map value from (a..b) to (0..1)
+    value = (value - a) / (b - a);
+    // then map it from (0..1) to (c..d) and return it
+    return c + value * (d - c);
 }
 
 /* Initialize the WebGL context. Called from init() */
@@ -138,15 +163,18 @@ function initGL() {
     shProgram.Use();
 
     shProgram.iAttribVertex = gl.getAttribLocation(prog, "vertex");
+    shProgram.iAttribTex = gl.getAttribLocation(prog, "texture");
     shProgram.iModelViewProjectionMatrix = gl.getUniformLocation(prog, "ModelViewProjectionMatrix");
     shProgram.iLightPosition = gl.getUniformLocation(prog, "lightPosition");
     shProgram.iNormalMatrix = gl.getUniformLocation(prog, "normalMatrix");
     shProgram.ilight = gl.getUniformLocation(prog, "light");
+    shProgram.iScale = gl.getUniformLocation(prog, "scale");
+    shProgram.iCoords = gl.getUniformLocation(prog, "coords");
 
     surface = new Model('Surface');
-    surface.BufferData(CreateSurfaceData());
+    surface.BufferData(...CreateSurfaceData());
     surface2 = new Model('Surface');
-    surface2.BufferData(CreateSphere());
+    surface2.BufferData(CreateSphere(), CreateSphere());
 
     gl.enable(gl.DEPTH_TEST);
 }
@@ -154,7 +182,7 @@ function initGL() {
 
 /* Creates a program for use in the WebGL context gl, and returns the
  identifier for that program.  If an error occurs while compiling or
- linking the program, an exception of type Error is thrown.  The error
+ linking the program, an exception of type Error is thrown.  The error 
  string contains the compilation or linking error.  If no error occurs,
  the program identifier is the return value of the function.
  The second and third parameters are strings that contain the
@@ -192,6 +220,7 @@ function init() {
     try {
         canvas = document.getElementById("webglcanvas");
         gl = canvas.getContext("webgl");
+        LoadTexture()
         if (!gl) {
             throw "Browser does not support WebGL";
         }
@@ -225,42 +254,74 @@ function init() {
     draw2();
 }
 
+function LoadTexture() {
+    let texture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+
+    const image = new Image();
+    image.crossOrigin = 'anonymus';
+    image.src = "https://raw.githubusercontent.com/DmitriyPavlichenko/WebGL/CGW/metallic_rock.png";
+    image.onload = () => {
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        gl.texImage2D(
+            gl.TEXTURE_2D,
+            0,
+            gl.RGBA,
+            gl.RGBA,
+            gl.UNSIGNED_BYTE,
+            image
+        );
+        console.log("imageLoaded")
+        draw()
+    }
+}
+
+
 function CreateSphere() {
-    const vertexList = [];
-    const radius = 0.2;
-    const delta = 0.1;
+    let vertexList = [];
 
-    for (let u = 0; u < Math.PI * 2; u += delta) {
-        for (let t = 0; t < Math.PI; t += delta) {
-            const v = shhVert(u, t);
-            const w = shhVert(u + delta, t);
-            const wv = shhVert(u, t + delta);
-            const ww = shhVert(u + delta, t + delta);
-
-            vertexList.push(
-                v.x, v.y, v.z,
-                w.x, w.y, w.z,
-                wv.x, wv.y, wv.z,
-                wv.x, wv.y, wv.z,
-                w.x, w.y, w.z,
-                ww.x, ww.y, ww.z
-            );
+    let u = 0,
+        t = 0;
+    while (u < Math.PI * 2) {
+        while (t < Math.PI) {
+            let v = sphVert(u, t);
+            let w = sphVert(u + 0.1, t);
+            let wv = sphVert(u, t + 0.1);
+            let ww = sphVert(u + 0.1, t + 0.1);
+            vertexList.push(v.x, v.y, v.z);
+            vertexList.push(w.x, w.y, w.z);
+            vertexList.push(wv.x, wv.y, wv.z);
+            vertexList.push(wv.x, wv.y, wv.z);
+            vertexList.push(w.x, w.y, w.z);
+            vertexList.push(ww.x, ww.y, ww.z);
+            t += 0.1;
         }
+        t = 0;
+        u += 0.1;
     }
     return vertexList;
 }
 
-const radius = 0.2;
+const radius = 0.1;
 
-function shhVert(long, lat) {
-    const cosLong = Math.cos(long);
-    const sinLong = Math.sin(long);
-    const sinLat = Math.sin(lat);
-    const cosLat = Math.cos(lat);
-
+function sphVert(long, lat) {
     return {
-        x: radius * cosLong * sinLat,
-        y: radius * sinLong * sinLat,
-        z: radius * cosLat
-    };
+        x: radius * Math.cos(long) * Math.sin(lat),
+        y: radius * Math.sin(long) * Math.sin(lat),
+        z: radius * Math.cos(lat)
+    }
+}
+
+window.onkeydown = (e) => {
+    if (e.keyCode == 87) {
+        coords[0] = Math.min(coords[0] + 0.01, 1);
+    } else if (e.keyCode == 83) {
+        coords[0] = Math.max(coords[0] - 0.01, 0);
+    } else if (e.keyCode == 68) {
+        coords[1] = Math.min(coords[1] + 0.01, 1);
+    } else if (e.keyCode == 65) {
+        coords[1] = Math.max(coords[1] - 0.01, 0);
+    }
 }
